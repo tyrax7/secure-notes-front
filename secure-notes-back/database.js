@@ -3,13 +3,20 @@ const db = new sqlite3.Database('./securenotes.db');
 db.serialize(() => {
 db.run(`CREATE TABLE IF NOT EXISTS users (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
-email TEXT,
+email TEXT UNIQUE,
 password TEXT,
 role TEXT
-)`);
-db.run("DELETE FROM users");
-db.run("INSERT INTO users (email, password, role) VALUES ('admin@test.com', 'azerty','admin')");
 
+)`);
+db.run(`CREATE TABLE IF NOT EXISTS notes (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+title TEXT,
+content TEXT,
+user_id INTEGER,
+FOREIGN KEY (user_id) REFERENCES users(id)
+)`);
+db.run(`DELETE FROM notes WHERE id = 1`);
+db.run(`INSERT INTO notes (title, content, user_id) VALUES ('Ma première note', 'Voici le texte de ma note.', 1)`);
 console.log("Base de données SQLite initialisée avec succès.");
 });
 module.exports = db;

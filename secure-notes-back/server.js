@@ -1,12 +1,23 @@
+require('dotenv').config();
+const jwt = require('jsonwebtoken');
 const express = require('express');
 const cors = require('cors');
-const app = express();
-const db = require('./database');
 const bcrypt = require('bcrypt'); 
+const rateLimit = require("express-rate-limit"); 
+const helmet = require('helmet');
+const sanitizeHtml = require('sanitize-html');
+
+const db = require('./database');
+const authMiddleware = require('./middleware/auth');
+
+const saltRounds = 10; 
+const app = express();
+
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
-const saltRounds = 10; 
 
+const limiter = rateLimit({windowMs: 15 * 60 * 1000,  max: 5,});
 app.post('/api/auth/register', async (req, res) => {
     const { email, password } = req.body;
     console.log("Tentative d'inscription pour :", email);
@@ -27,7 +38,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', limiter, (req, res) => {
     const { email, password } = req.body;
     const query = `SELECT * FROM users WHERE email = ?`;
     
@@ -38,14 +49,18 @@ app.post('/api/auth/login', (req, res) => {
 
         if (!user) {
             return res.status(401).json({ error: "Identifiants incorrects" });
+            
         }
         
         try {
             const match = await bcrypt.compare(password, user.password);
             
             if (match) {
-                const { password: userPassword, ...safeUser } = user;
-                res.json({ user: safeUser, token: 'super-faux-token' });
+                const payload = { id: user.id, email: user.email, role: user.role };
+                const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+                delete user.password;
+                res.json({ user, token });
+
             } else {
                 res.status(401).json({ error: "Identifiants incorrects" });
             }
@@ -56,17 +71,64 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
-app.get('/api/notes', (req, res) => {
-    console.log("React demande la liste des notes !");
-    res.json([
-        {
-            id: 1,
-            content: 'Ceci est une fausse note envoyée par le serveur !',
-            authorId: 2
+app.post('/api/notes', authMiddleware, (req, res) => {
+    const { content } = req.body; 
+    
+    const authorId = req.user.id; 
+
+    if (!content) {
+        return res.status(400).json({ error: "Le contenu est obligatoire." });
+    }
+
+    const cleanContent = sanitizeHtml(content, {
+        allowedTags: [],     
+    });
+
+    console.log("Texte original :", content);
+    console.log("Texte nettoyé :", cleanContent);
+
+    const query = `INSERT INTO notes (content, authorId) VALUES (?, ?)`;
+    
+    db.run(query, [cleanContent, authorId], function(err) {
+        if (err) {
+            console.error("Erreur base de données :", err.message);
+            return res.status(500).json({ error: "Erreur lors de la création de la note" });
         }
-    ]);
+        
+        res.status(201).json({ 
+            message: "Note créée et sécurisée avec succès",
+            noteId: this.lastID
+        });
+    });
+});
+delete app.get("/api/notes", authMiddleware, (req, res) => {
+    const query = "SELECT * FROM notes";
+    db.all(query, [], (err, notes) => {
+        if (err) 
+        return res.status(500).json({ error: "Erreur serveur" });
+        res.json(notes);
+    });
+
 });
 
+app.delete("/api/notes/:id", authMiddleware, (req, res) => {
+    const noteId = req.params.id;
+    const userId = req.user.id;
+
+    const query = "DELETE FROM notes WHERE id = ? AND user_id = ?";
+    
+    db.run(query, [noteId, userId], function(err) {
+        if (err) {
+            return res.status(500).json({ error: "Erreur serveur" });
+        }
+        
+        if (this.changes === 0) {
+            return res.status(404).json({ error: "Note introuvable ou accès refusé" });
+        }
+
+        res.json({ message: "Note supprimée avec succès" });
+    });
+});
 const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Serveur Back-end démarré sur http://localhost:${PORT}`);

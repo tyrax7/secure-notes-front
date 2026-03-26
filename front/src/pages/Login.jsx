@@ -16,8 +16,17 @@ function Login() {
             localStorage.setItem('token', response.data.token);
             navigate('/dashboard');
         } catch (error) {
-            alert('Erreur de connexion (Le back-end est-il prêt ?)');
+        const status = error.response?.status;
+        const message = error.response?.data?.error;
+
+        if (status === 403) {
+        alert("Compte bloqué après trop de tentatives !");
+        } else if (status === 401) {
+        alert("Mot de passe incorrect !");
+        } else {
+        alert(message || "Erreur de connexion (Le back-end est-il prêt ?)");
         }
+}
     };
 
     return (

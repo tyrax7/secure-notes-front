@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Register from './pages/Register';
-
+import AdminPanel from './pages/AdminPanel';
 function App() {
   return (
     <Router>
@@ -13,6 +13,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/register" element={<Register />} />
+          <Route path="admin" element={<AdminPanel />} />
            
         </Routes>
       </div>

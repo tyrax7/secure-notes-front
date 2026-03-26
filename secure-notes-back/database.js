@@ -12,8 +12,9 @@ async function initDb() {
       email TEXT UNIQUE,
       password TEXT,
       role TEXT
+      
     )`);
-
+    
     db.run(`CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT,

@@ -42,29 +42,36 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', limiter, (req, res) => {
     const { email, password } = req.body;
-    const query = `SELECT * FROM users WHERE email = ?`;
 
-    db.get(query, [email], async (err, user) => {
+    db.get(`SELECT * FROM users WHERE email = ?`, [email], async (err, user) => {
         if (err) return res.status(500).json({ error: "Erreur serveur" });
         if (!user) return res.status(401).json({ error: "Identifiants incorrects" });
 
+        if (user.failed_attempts >= 3) {
+            return res.status(403).json({ error: "Compte bloqué après trop de tentatives" });
+        }
+
         try {
             const match = await bcrypt.compare(password, user.password);
-            if (match) {
-                const payload = { id: user.id, email: user.email, role: user.role };
-                const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-                delete user.password;
-                res.json({ user, token });
-            } else {
-                res.status(401).json({ error: "Identifiants incorrects" });
+
+            if (!match) {
+                db.run(`UPDATE users SET failed_attempts = failed_attempts + 1 WHERE id = ?`, [user.id]);
+                return res.status(401).json({ error: "Identifiants incorrects" });
             }
+
+            db.run(`UPDATE users SET failed_attempts = 0 WHERE id = ?`, [user.id]);
+
+            const payload = { id: user.id, email: user.email, role: user.role };
+            const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+            delete user.password;
+            res.json({ user, token });
+
         } catch (error) {
-            console.error("Erreur lors de la comparaison :", error);
+            console.error("Erreur :", error);
             res.status(500).json({ error: "Erreur serveur" });
         }
     });
 });
-
 app.get("/api/notes", authMiddleware, (req, res) => {
     const isAdmin = req.user.role === 'admin';
     const query = isAdmin ? "SELECT * FROM notes" : "SELECT * FROM notes WHERE user_id = ?";

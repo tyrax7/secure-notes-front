@@ -89,6 +89,9 @@ function Dashboard() {
                     
                     </div>
                 ))}
+                {user.role === 'admin' && (
+                    <button onClick={() => navigate('/admin')}>Panel Admin</button>
+                )}
             </div>
         </div>
     );
